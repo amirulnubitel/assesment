@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Admin Panel - Listings Management</title>
+
+		<!-- Vue.js -->
+		<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+		<!-- Bootstrap CSS -->
+		<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+		<!-- Bootstrap Icons -->
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" />
+
+		<!-- Axios for HTTP requests -->
+		<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+		<style>
+			.sidebar {
+				min-height: 100vh;
+				background-color: #f8f9fa;
+			}
+			.content {
+				margin-left: 0;
+			}
+			@media (min-width: 768px) {
+				.content {
+					margin-left: 250px;
+				}
+			}
+			.navbar-brand {
+				font-weight: bold;
+			}
+			.card-stats {
+				border-left: 4px solid #007bff;
+			}
+			.loading {
+				text-align: center;
+				padding: 20px;
+			}
+			.map-container {
+				height: 300px;
+				background-color: #f0f0f0;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				border: 1px solid #ddd;
+				border-radius: 4px;
+			}
+			.login-container {
+				min-height: 100vh;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background-color: #f8f9fa;
+			}
+			.login-card {
+				width: 100%;
+				max-width: 400px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<!-- Login Page -->
+			<div v-if="!isAuthenticated" class="login-container">
+				<div class="card login-card">
+					<div class="card-body">
+						<h4 class="card-title text-center mb-4"><i class="bi bi-shield-lock"></i> Admin Login</h4>
+
+						<div v-if="loginError" class="alert alert-danger" role="alert">{{ loginError }}</div>
+
+						<form @submit.prevent="login">
+							<div class="mb-3">
+								<label for="email" class="form-label">Email</label>
+								<input type="email" class="form-control" id="email" v-model="loginForm.email" required />
+							</div>
+							<div class="mb-3">
+								<label for="password" class="form-label">Password</label>
+								<input type="password" class="form-control" id="password" v-model="loginForm.password" required />
+							</div>
+							<button type="submit" class="btn btn-primary w-100" :disabled="loginLoading">
+								<span v-if="loginLoading" class="spinner-border spinner-border-sm me-2"></span>
+								Login
+							</button>
+						</form>
+
+						<div class="mt-3 text-center">
+							<small class="text-muted"> Demo: admin@example.com / admin123 </small>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Main Admin Panel -->
+			<div v-else>
+				<!-- Sidebar -->
+				<nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top d-md-none">
+					<div class="container-fluid">
+						<span class="navbar-brand">Admin Panel</span>
+						<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar">
+							<span class="navbar-toggler-icon"></span>
+						</button>
+					</div>
+				</nav>
+
+				<div class="row">
+					<nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse" id="sidebar">
+						<div class="position-sticky pt-3">
+							<div class="d-none d-md-block mb-4">
+								<h5 class="text-center">Admin Panel</h5>
+								<hr />
+							</div>
+
+							<ul class="nav flex-column">
+								<li class="nav-item">
+									<a class="nav-link" :class="{ active: currentPage === 'dashboard' }" href="#" @click="setPage('dashboard')"> <i class="bi bi-house-door"></i> Dashboard </a>
+								</li>
+								<li class="nav-item">
+									<a class="nav-link" :class="{ active: currentPage === 'listings' }" href="#" @click="setPage('listings')"> <i class="bi bi-geo-alt"></i> Listings </a>
+								</li>
+								<li class="nav-item">
+									<a class="nav-link" :class="{ active: currentPage === 'users' }" href="#" @click="setPage('users')"> <i class="bi bi-people"></i> Users </a>
+								</li>
+								<li class="nav-item mt-3">
+									<a class="nav-link text-danger" href="#" @click="logout"> <i class="bi bi-box-arrow-right"></i> Logout </a>
+								</li>
+							</ul>
+
+							<div class="mt-4 p-3 bg-info text-white rounded mx-3">
+								<small>
+									<strong>Welcome, {{ user.name }}!</strong><br />
+									{{ user.email }}
+								</small>
+							</div>
+						</div>
+					</nav>
+
+					<!-- Main Content -->
+					<main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 content">
+						<div class="pt-3 pb-2 mb-3 border-bottom d-md-none">
+							<h1 class="h2">{{ getPageTitle() }}</h1>
+						</div>
+
+						<div class="d-none d-md-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+							<h1 class="h2">{{ getPageTitle() }}</h1>
+						</div>
+
+						<!-- Dashboard -->
+						<div v-if="currentPage === 'dashboard'">
+							<div class="row" v-if="dashboardStats">
+								<div class="col-md-3 mb-3">
+									<div class="card card-stats bg-primary text-white">
+										<div class="card-body">
+											<div class="d-flex justify-content-between">
+												<div>
+													<h5>Total Users</h5>
+													<h3>{{ dashboardStats.total_users }}</h3>
+												</div>
+												<div class="align-self-center">
+													<i class="bi bi-people fs-1"></i>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+								<div class="col-md-3 mb-3">
+									<div class="card card-stats bg-success text-white">
+										<div class="card-body">
+											<div class="d-flex justify-content-between">
+												<div>
+													<h5>Total Listings</h5>
+													<h3>{{ dashboardStats.total_listings }}</h3>
+												</div>
+												<div class="align-self-center">
+													<i class="bi bi-geo-alt fs-1"></i>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+								<div class="col-md-3 mb-3">
+									<div class="card card-stats bg-warning text-white">
+										<div class="card-body">
+											<div class="d-flex justify-content-between">
+												<div>
+													<h5>Admins</h5>
+													<h3>{{ dashboardStats.total_admins }}</h3>
+												</div>
+												<div class="align-self-center">
+													<i class="bi bi-shield-check fs-1"></i>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+								<div class="col-md-3 mb-3">
+									<div class="card card-stats bg-info text-white">
+										<div class="card-body">
+											<div class="d-flex justify-content-between">
+												<div>
+													<h5>API Docs</h5>
+													<small><a href="/api-docs" target="_blank" class="text-white">View</a></small>
+												</div>
+												<div class="align-self-center">
+													<i class="bi bi-book fs-1"></i>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							<div class="row">
+								<div class="col-md-6">
+									<div class="card">
+										<div class="card-header">
+											<h5>Recent Listings</h5>
+										</div>
+										<div class="card-body">
+											<div v-if="dashboardStats && dashboardStats.recent_listings.length > 0">
+												<div v-for="listing in dashboardStats.recent_listings" :key="listing.id" class="d-flex justify-content-between align-items-center border-bottom py-2">
+													<div>
+														<strong>{{ listing.name }}</strong><br />
+														<small class="text-muted">by {{ listing.user_name }}</small>
+													</div>
+													<small class="text-muted">{{ formatDate(listing.created_at) }}</small>
+												</div>
+											</div>
+											<div v-else class="text-muted">No recent listings</div>
+										</div>
+									</div>
+								</div>
+								<div class="col-md-6">
+									<div class="card">
+										<div class="card-header">
+											<h5>Quick Actions</h5>
+										</div>
+										<div class="card-body">
+											<div class="d-grid gap-2">
+												<button class="btn btn-primary" @click="setPage('listings')"><i class="bi bi-plus-circle"></i> Add New Listing</button>
+												<button class="btn btn-secondary" @click="setPage('users')"><i class="bi bi-person-plus"></i> Add New User</button>
+												<a href="/api-docs" target="_blank" class="btn btn-info"> <i class="bi bi-book"></i> View API Documentation </a>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<!-- Listings Management -->
+						<div v-if="currentPage === 'listings'">
+							<div class="d-flex justify-content-between align-items-center mb-3">
+								<div></div>
+								<button class="btn btn-primary" @click="showListingModal()"><i class="bi bi-plus-circle"></i> Add Listing</button>
+							</div>
+
+							<div class="card">
+								<div class="card-body">
+									<div v-if="listingsLoading" class="loading">
+										<div class="spinner-border" role="status">
+											<span class="visually-hidden">Loading...</span>
+										</div>
+									</div>
+
+									<div v-else>
+										<div class="table-responsive">
+											<table class="table table-striped">
+												<thead>
+													<tr>
+														<th>ID</th>
+														<th>Name</th>
+														<th>Description</th>
+														<th>Location</th>
+														<th>Owner</th>
+														<th>Created</th>
+														<th>Actions</th>
+													</tr>
+												</thead>
+												<tbody>
+													<tr v-for="listing in listings" :key="listing.id">
+														<td>{{ listing.id }}</td>
+														<td><strong>{{ listing.name }}</strong></td>
+														<td>{{ truncateText(listing.description, 50) }}</td>
+														<td>
+															<small class="text-muted"> {{ listing.latitude }}, {{ listing.longitude }} </small>
+														</td>
+														<td>{{ listing.user_name }}</td>
+														<td>{{ formatDate(listing.created_at) }}</td>
+														<td>
+															<div class="btn-group btn-group-sm">
+																<button class="btn btn-outline-primary" @click="showListingModal(listing)">
+																	<i class="bi bi-pencil"></i>
+																</button>
+																<button class="btn btn-outline-danger" @click="deleteListing(listing.id)">
+																	<i class="bi bi-trash"></i>
+																</button>
+															</div>
+														</td>
+													</tr>
+												</tbody>
+											</table>
+										</div>
+
+										<div v-if="listings.length === 0" class="text-center text-muted py-5">
+											<i class="bi bi-geo-alt fs-1"></i>
+											<p>No listings found</p>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<!-- Users Management -->
+						<div v-if="currentPage === 'users'">
+							<div class="d-flex justify-content-between align-items-center mb-3">
+								<div></div>
+								<button class="btn btn-primary" @click="showUserModal()"><i class="bi bi-person-plus"></i> Add User</button>
+							</div>
+
+							<div class="card">
+								<div class="card-body">
+									<div v-if="usersLoading" class="loading">
+										<div class="spinner-border" role="status">
+											<span class="visually-hidden">Loading...</span>
+										</div>
+									</div>
+
+									<div v-else>
+										<div class="table-responsive">
+											<table class="table table-striped">
+												<thead>
+													<tr>
+														<th>ID</th>
+														<th>Name</th>
+														<th>Email</th>
+														<th>Role</th>
+														<th>Created</th>
+														<th>Actions</th>
+													</tr>
+												</thead>
+												<tbody>
+													<tr v-for="user in users" :key="user.id">
+														<td>{{ user.id }}</td>
+														<td><strong>{{ user.name }}</strong></td>
+														<td>{{ user.email }}</td>
+														<td>
+															<span class="badge" :class="user.role_type === 'a' ? 'bg-danger' : 'bg-primary'"> {{ user.role_type === 'a' ? 'Admin' : 'User' }} </span>
+														</td>
+														<td>{{ formatDate(user.created_at) }}</td>
+														<td>
+															<div class="btn-group btn-group-sm">
+																<button class="btn btn-outline-primary" @click="showUserModal(user)">
+																	<i class="bi bi-pencil"></i>
+																</button>
+																<button class="btn btn-outline-danger" @click="deleteUser(user.id)" :disabled="user.id === this.user.user_id">
+																	<i class="bi bi-trash"></i>
+																</button>
+															</div>
+														</td>
+													</tr>
+												</tbody>
+											</table>
+										</div>
+
+										<div v-if="users.length === 0" class="text-center text-muted py-5">
+											<i class="bi bi-people fs-1"></i>
+											<p>No users found</p>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</main>
+				</div>
+			</div>
+
+			<!-- Listing Modal -->
+			<div class="modal fade" id="listingModal" tabindex="-1">
+				<div class="modal-dialog modal-lg">
+					<div class="modal-content">
+						<div class="modal-header">
+							<h5 class="modal-title">{{ editingListing ? 'Edit Listing' : 'Add Listing' }}</h5>
+							<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+						</div>
+						<form @submit.prevent="saveListing">
+							<div class="modal-body">
+								<div class="row">
+									<div class="col-md-6">
+										<div class="mb-3">
+											<label class="form-label">Name *</label>
+											<input type="text" class="form-control" v-model="listingForm.name" required />
+										</div>
+										<div class="mb-3">
+											<label class="form-label">Description</label>
+											<textarea class="form-control" rows="3" v-model="listingForm.description" placeholder="Leave empty to auto-generate with AI"></textarea>
+											<div class="form-text"><i class="bi bi-robot"></i> Leave empty to auto-generate description using AI</div>
+										</div>
+									</div>
+									<div class="col-md-6">
+										<div class="mb-3">
+											<label class="form-label">Latitude *</label>
+											<input type="number" class="form-control" v-model="listingForm.latitude" step="0.000001" min="-90" max="90" required />
+											<div class="form-text">Range: -90 to 90</div>
+										</div>
+										<div class="mb-3">
+											<label class="form-label">Longitude *</label>
+											<input type="number" class="form-control" v-model="listingForm.longitude" step="0.000001" min="-180" max="180" required />
+											<div class="form-text">Range: -180 to 180</div>
+										</div>
+									</div>
+								</div>
+								<div class="mb-3">
+									<label class="form-label">Owner *</label>
+									<select class="form-select" v-model="listingForm.user_id" required>
+										<option value="">Select user...</option>
+										<option v-for="user in allUsers" :key="user.id" :value="user.id">{{ user.name }} ({{ user.email }})</option>
+									</select>
+								</div>
+
+								<div class="alert alert-info">
+									<i class="bi bi-info-circle"></i>
+									<strong>Tip:</strong> You can use online tools like <a href="https://www.latlong.net/" target="_blank">LatLong.net</a> to find coordinates.
+								</div>
+							</div>
+							<div class="modal-footer">
+								<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+								<button type="submit" class="btn btn-primary" :disabled="savingListing">
+									<span v-if="savingListing" class="spinner-border spinner-border-sm me-2"></span>
+									{{ editingListing ? 'Update' : 'Create' }}
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			</div>
+
+			<!-- User Modal -->
+			<div class="modal fade" id="userModal" tabindex="-1">
+				<div class="modal-dialog">
+					<div class="modal-content">
+						<div class="modal-header">
+							<h5 class="modal-title">{{ editingUser ? 'Edit User' : 'Add User' }}</h5>
+							<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+						</div>
+						<form @submit.prevent="saveUser">
+							<div class="modal-body">
+								<div class="mb-3">
+									<label class="form-label">Name *</label>
+									<input type="text" class="form-control" v-model="userForm.name" required />
+								</div>
+								<div class="mb-3">
+									<label class="form-label">Email *</label>
+									<input type="email" class="form-control" v-model="userForm.email" required />
+								</div>
+								<div class="mb-3">
+									<label class="form-label">Password {{ editingUser ? '(leave empty to keep current)' : '*' }}</label>
+									<input type="password" class="form-control" v-model="userForm.password" :required="!editingUser" minlength="6" />
+								</div>
+								<div class="mb-3">
+									<label class="form-label">Role *</label>
+									<select class="form-select" v-model="userForm.role_type" required>
+										<option value="u">User</option>
+										<option value="a">Admin</option>
+									</select>
+								</div>
+							</div>
+							<div class="modal-footer">
+								<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+								<button type="submit" class="btn btn-primary" :disabled="savingUser">
+									<span v-if="savingUser" class="spinner-border spinner-border-sm me-2"></span>
+									{{ editingUser ? 'Update' : 'Create' }}
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Bootstrap JS -->
+		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+		<script>
+			const { createApp } = Vue;
+
+			createApp({
+				data() {
+					return {
+						isAuthenticated: false,
+						user: null,
+						currentPage: "dashboard",
+
+						// Login
+						loginForm: {
+							email: "",
+							password: "",
+						},
+						loginError: "",
+						loginLoading: false,
+
+						// Dashboard
+						dashboardStats: null,
+
+						// Listings
+						listings: [],
+						listingsLoading: false,
+						listingForm: {
+							name: "",
+							description: "",
+							latitude: "",
+							longitude: "",
+							user_id: "",
+						},
+						editingListing: null,
+						savingListing: false,
+
+						// Users
+						users: [],
+						usersLoading: false,
+						allUsers: [], // For dropdown in listing form
+						userForm: {
+							name: "",
+							email: "",
+							password: "",
+							role_type: "u",
+						},
+						editingUser: null,
+						savingUser: false,
+					};
+				},
+
+				created() {
+					// Setup axios defaults
+					const token = localStorage.getItem("admin_token");
+					if (token) {
+						axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+						this.isAuthenticated = true;
+						this.user = JSON.parse(localStorage.getItem("admin_user") || "{}");
+						this.loadDashboard();
+					}
+				},
+
+				methods: {
+					// Authentication
+					async login() {
+						this.loginLoading = true;
+						this.loginError = "";
+
+						try {
+							const response = await axios.post("/api/admin/login", this.loginForm);
+
+							if (response.data.status === 200) {
+								const { access_token, ...userData } = response.data.result;
+
+								localStorage.setItem("admin_token", access_token);
+								localStorage.setItem("admin_user", JSON.stringify(userData));
+
+								axios.defaults.headers.common["Authorization"] = `Bearer ${access_token}`;
+
+								this.isAuthenticated = true;
+								this.user = userData;
+								this.loadDashboard();
+							}
+						} catch (error) {
+							this.loginError = error.response?.data?.message || "Login failed";
+						}
+
+						this.loginLoading = false;
+					},
+
+					logout() {
+						localStorage.removeItem("admin_token");
+						localStorage.removeItem("admin_user");
+						delete axios.defaults.headers.common["Authorization"];
+						this.isAuthenticated = false;
+						this.user = null;
+						this.currentPage = "dashboard";
+					},
+
+					// Navigation
+					setPage(page) {
+						this.currentPage = page;
+
+						if (page === "dashboard") {
+							this.loadDashboard();
+						} else if (page === "listings") {
+							this.loadListings();
+							this.loadAllUsers();
+						} else if (page === "users") {
+							this.loadUsers();
+						}
+					},
+
+					getPageTitle() {
+						const titles = {
+							dashboard: "Dashboard",
+							listings: "Listings Management",
+							users: "Users Management",
+						};
+						return titles[this.currentPage] || "Admin Panel";
+					},
+
+					// Dashboard
+					async loadDashboard() {
+						try {
+							const response = await axios.get("/api/admin/dashboard");
+							this.dashboardStats = response.data.result;
+						} catch (error) {
+							console.error("Failed to load dashboard:", error);
+						}
+					},
+
+					// Listings
+					async loadListings() {
+						this.listingsLoading = true;
+						try {
+							const response = await axios.get("/api/admin/listings");
+							this.listings = response.data.result.data;
+						} catch (error) {
+							console.error("Failed to load listings:", error);
+						}
+						this.listingsLoading = false;
+					},
+
+					showListingModal(listing = null) {
+						this.editingListing = listing;
+
+						if (listing) {
+							this.listingForm = {
+								name: listing.name,
+								description: listing.description || "",
+								latitude: listing.latitude,
+								longitude: listing.longitude,
+								user_id: listing.user_id,
+							};
+						} else {
+							this.listingForm = {
+								name: "",
+								description: "",
+								latitude: "",
+								longitude: "",
+								user_id: "",
+							};
+						}
+
+						new bootstrap.Modal(document.getElementById("listingModal")).show();
+					},
+
+					async saveListing() {
+						this.savingListing = true;
+
+						try {
+							const url = this.editingListing ? `/api/admin/listings/${this.editingListing.id}` : "/api/admin/listings";
+							const method = this.editingListing ? "put" : "post";
+
+							await axios[method](url, this.listingForm);
+
+							bootstrap.Modal.getInstance(document.getElementById("listingModal")).hide();
+							this.loadListings();
+							this.loadDashboard(); // Refresh stats
+						} catch (error) {
+							alert("Error saving listing: " + (error.response?.data?.message || error.message));
+						}
+
+						this.savingListing = false;
+					},
+
+					async deleteListing(id) {
+						if (!confirm("Are you sure you want to delete this listing?")) return;
+
+						try {
+							await axios.delete(`/api/admin/listings/${id}`);
+							this.loadListings();
+							this.loadDashboard(); // Refresh stats
+						} catch (error) {
+							alert("Error deleting listing: " + (error.response?.data?.message || error.message));
+						}
+					},
+
+					// Users
+					async loadUsers() {
+						this.usersLoading = true;
+						try {
+							const response = await axios.get("/api/admin/users");
+							this.users = response.data.result.data;
+						} catch (error) {
+							console.error("Failed to load users:", error);
+						}
+						this.usersLoading = false;
+					},
+
+					async loadAllUsers() {
+						try {
+							const response = await axios.get("/api/admin/users?per_page=100");
+							this.allUsers = response.data.result.data;
+						} catch (error) {
+							console.error("Failed to load all users:", error);
+						}
+					},
+
+					showUserModal(user = null) {
+						this.editingUser = user;
+
+						if (user) {
+							this.userForm = {
+								name: user.name,
+								email: user.email,
+								password: "",
+								role_type: user.role_type,
+							};
+						} else {
+							this.userForm = {
+								name: "",
+								email: "",
+								password: "",
+								role_type: "u",
+							};
+						}
+
+						new bootstrap.Modal(document.getElementById("userModal")).show();
+					},
+
+					async saveUser() {
+						this.savingUser = true;
+
+						try {
+							const url = this.editingUser ? `/api/admin/users/${this.editingUser.id}` : "/api/admin/users";
+							const method = this.editingUser ? "put" : "post";
+
+							await axios[method](url, this.userForm);
+
+							bootstrap.Modal.getInstance(document.getElementById("userModal")).hide();
+							this.loadUsers();
+							this.loadAllUsers(); // Refresh dropdown
+							this.loadDashboard(); // Refresh stats
+						} catch (error) {
+							alert("Error saving user: " + (error.response?.data?.message || error.message));
+						}
+
+						this.savingUser = false;
+					},
+
+					async deleteUser(id) {
+						if (!confirm("Are you sure you want to delete this user?")) return;
+
+						try {
+							await axios.delete(`/api/admin/users/${id}`);
+							this.loadUsers();
+							this.loadAllUsers(); // Refresh dropdown
+							this.loadDashboard(); // Refresh stats
+						} catch (error) {
+							alert("Error deleting user: " + (error.response?.data?.message || error.message));
+						}
+					},
+
+					// Utilities
+					formatDate(dateString) {
+						return new Date(dateString).toLocaleDateString();
+					},
+
+					truncateText(text, length) {
+						if (!text) return "";
+						return text.length > length ? text.substr(0, length) + "..." : text;
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>
